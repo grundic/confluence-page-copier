@@ -68,6 +68,12 @@ class ConfluencePageCopier(object):
                     title=dst_title
                 ))
 
+        self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
+            src_space=source['space']['key'],
+            src_title=source['title'],
+            dst_space=dst_space_key,
+            dst_title=dst_title,
+        ))
         page_copy = self._client.create_new_content({
             'type': source['type'],
             'space': {'key': dst_space_key},
