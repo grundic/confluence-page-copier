@@ -41,16 +41,23 @@ class ConfluencePageCopier(object):
             elif content['size'] == 1:
                 return content['results'][0]
             else:
-                raise ValueError("Unexpected result count: {}".format(content['size']))
+                spaces = set([r['space']['name'] for r in content['results']])
+                raise ValueError(
+                    "Unexpected result count: {count}, possibly you have to specify space to search in. "
+                    "Results includes these spaces: {spaces}".format(
+                        count=content['size'], spaces=', '.join(spaces)
+                ))
         except requests.exceptions.HTTPError as e:
             if 400 <= e.response.status_code < 500:
                 return None
             raise
 
-    def _get_next_title(self, title):
+    def _get_next_title(self, space_key, title):
         regex = re.compile("^{title}( \(\d+\))?$".format(title=re.escape(title)))
         matched_pages = list()
-        search_results = self._client.search_content(cql_str='title ~ "{title}"'.format(title=title))
+        search_results = self._client.search_content(cql_str='space = {space} and title ~ "{title}"'.format(
+            space=space_key, title=title
+        ))
         for result in search_results['results']:
             if regex.match(result['title']):
                 matched_pages.append(result)
@@ -69,7 +76,7 @@ class ConfluencePageCopier(object):
             self.log.debug("Setting destination space key to source's value '{}'".format(src_space_key))
             dst_space_key = src_space_key
         if not dst_title:
-            next_title = self._get_next_title(source['title'])
+            next_title = self._get_next_title(space_key=dst_space_key, title=source['title'])
             if next_title:
                 self.log.debug("Setting destination title to calculated value '{}'".format(next_title))
                 dst_title = next_title
