@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import re
 import logging
 import argparse
 
@@ -46,12 +47,34 @@ class ConfluencePageCopier(object):
                 return None
             raise
 
+    def _get_next_title(self, title):
+        regex = re.compile("^{title}( \(\d+\))?$".format(title=re.escape(title)))
+        matched_pages = list()
+        search_results = self._client.search_content(cql_str='title ~ "{title}"'.format(title=title))
+        for result in search_results['results']:
+            if regex.match(result['title']):
+                matched_pages.append(result)
+
+        total = len(matched_pages)
+        if total == 0:
+            self.log.warn('Failed to find suitable page to generate next title!')
+            return None
+        else:
+            return "{title} ({counter})".format(title=title, counter=total)
+
     def copy(self, src, dst_space_key=None, dst_title=None, force=False):
         source = self._find_page(**src)
         if not dst_space_key:
             src_space_key = source['space']['key']
-            self.log.debug("Setting destination space key to source's '{}'".format(src_space_key))
+            self.log.debug("Setting destination space key to source's value '{}'".format(src_space_key))
             dst_space_key = src_space_key
+        if not dst_title:
+            next_title = self._get_next_title(source['title'])
+            if next_title:
+                self.log.debug("Setting destination title to calculated value '{}'".format(next_title))
+                dst_title = next_title
+            else:
+                raise ValueError("Destination title is not given and could not be calculated!")
 
         page_exists = self._find_page(space_key=dst_space_key, title=dst_title)
         if page_exists:
@@ -61,7 +84,6 @@ class ConfluencePageCopier(object):
                     title=page_exists['title']
                 ))
                 self._client.delete_content_by_id(page_exists['id'])
-
             else:
                 raise RuntimeError("Can't copy to '{space}/{title}' as it already exists!".format(
                     space=dst_space_key,
