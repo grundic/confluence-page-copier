@@ -74,6 +74,26 @@ class ConfluencePageCopier(object):
 
     def copy(self, src, dst_space_key=None, dst_title=None, overwrite=False):
         source = self._find_page(**src)
+        dst_space_key, dst_title = self._init_destination_page(source, dst_space_key, dst_title)
+
+        existing_dst_page = self._find_page(space_key=dst_space_key, title=dst_title)
+        if existing_dst_page:
+            if overwrite:
+                page_copy = self._overwrite_page(source, existing_dst_page, dst_space_key, dst_title)
+            else:
+                raise RuntimeError("Can't copy to '{space}/{title}' as it already exists!".format(
+                    space=dst_space_key,
+                    title=dst_title
+                ))
+        else:
+            page_copy = self._copy_page(source, dst_space_key, dst_title)
+
+        labels = list()
+        for label in self._client.get_content_labels(content_id=source['id'])['results']:
+            labels.append({'prefix': label['prefix'], 'name': label['name']})
+        self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
+
+    def _init_destination_page(self, source, dst_space_key, dst_title):
         if not dst_space_key:
             src_space_key = source['space']['key']
             self.log.debug("Setting destination space key to source's value '{}'".format(src_space_key))
@@ -85,60 +105,24 @@ class ConfluencePageCopier(object):
                 dst_title = next_title
             else:
                 raise ValueError("Destination title is not given and could not be calculated!")
+        return dst_space_key, dst_title
 
-        existing_dst_page = self._find_page(space_key=dst_space_key, title=dst_title)
-        if existing_dst_page:
-            if overwrite:
-                # Compare content and ancestors with existing before overwrite.
-                if (
-                    source['body']['storage']['value'] != existing_dst_page['body']['storage']['value']
-                ) or (
-                    source['ancestors'] != existing_dst_page['ancestors']
-                ):
-                    next_version = existing_dst_page['version']['number'] + 1
-                    self.log.debug("Overwriting existing '{space}/{title}' with {version} version".format(
-                        space=existing_dst_page['space']['key'],
-                        title=existing_dst_page['title'],
-                        version=next_version
-                    ))
-
-                    content_data = {
-                        'id': existing_dst_page['id'],
-                        'type': source['type'],
-                        'space': {'key': dst_space_key},
-                        'title': dst_title,
-                        'body': {
-                            'storage': {
-                                'value': source['body']['storage']['value'],
-                                'representation': 'storage'
-                            }
-                        },
-                        'ancestors': source['ancestors'],
-                        "version": {"number": next_version},
-                    }
-                    page_copy = self._client.update_content_by_id(
-                        content_data=content_data,
-                        content_id=existing_dst_page['id']
-                    )
-                else:
-                    self.log.debug("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
-                        space=existing_dst_page['space']['key'],
-                        title=existing_dst_page['title'],
-                    ))
-                    page_copy = existing_dst_page
-            else:
-                raise RuntimeError("Can't copy to '{space}/{title}' as it already exists!".format(
-                    space=dst_space_key,
-                    title=dst_title
-                ))
-        else:
-            self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
-                src_space=source['space']['key'],
-                src_title=source['title'],
-                dst_space=dst_space_key,
-                dst_title=dst_title,
+    def _overwrite_page(self, source, existing_dst_page, dst_space_key, dst_title):
+        # Compare content and ancestors with existing before overwrite.
+        if (
+                source['body']['storage']['value'] != existing_dst_page['body']['storage']['value']
+        ) or (
+                source['ancestors'] != existing_dst_page['ancestors']
+        ):
+            next_version = existing_dst_page['version']['number'] + 1
+            self.log.debug("Overwriting existing '{space}/{title}' with {version} version".format(
+                space=existing_dst_page['space']['key'],
+                title=existing_dst_page['title'],
+                version=next_version
             ))
-            page_copy = self._client.create_new_content({
+
+            content_data = {
+                'id': existing_dst_page['id'],
                 'type': source['type'],
                 'space': {'key': dst_space_key},
                 'title': dst_title,
@@ -149,13 +133,42 @@ class ConfluencePageCopier(object):
                     }
                 },
                 'ancestors': source['ancestors'],
-            })
+                "version": {"number": next_version},
+            }
+            page_copy = self._client.update_content_by_id(
+                content_data=content_data,
+                content_id=existing_dst_page['id']
+            )
+        else:
+            self.log.debug("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
+                space=existing_dst_page['space']['key'],
+                title=existing_dst_page['title'],
+            ))
+            page_copy = existing_dst_page
 
-        labels = list()
-        for label in self._client.get_content_labels(content_id=source['id'])['results']:
-            labels.append({'prefix': label['prefix'], 'name': label['name']})
-        self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
+        return page_copy
 
+    def _copy_page(self, source, dst_space_key, dst_title):
+        self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
+            src_space=source['space']['key'],
+            src_title=source['title'],
+            dst_space=dst_space_key,
+            dst_title=dst_title,
+        ))
+        page_copy = self._client.create_new_content({
+            'type': source['type'],
+            'space': {'key': dst_space_key},
+            'title': dst_title,
+            'body': {
+                'storage': {
+                    'value': source['body']['storage']['value'],
+                    'representation': 'storage'
+                }
+            },
+            'ancestors': source['ancestors'],
+        })
+
+        return page_copy
 
 def init_args():
     parser = argparse.ArgumentParser(description='Script for copying Confluence page')
