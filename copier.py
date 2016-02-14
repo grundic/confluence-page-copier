@@ -10,6 +10,9 @@ __author__ = 'Grigory Chernyshev <systray@yandex.ru>'
 
 
 class ConfluencePageCopier(object):
+
+    EXPAND_FIELDS = 'body.storage,space,ancestors,version'
+
     def __init__(self, username='admin', password='admin', uri_base='http://localhost:1990/confluence'):
         self.log = logging.getLogger('confl-copier')
         self._client = ConfluenceAPI(username, password, uri_base)
@@ -20,7 +23,7 @@ class ConfluencePageCopier(object):
                 self.log.debug("Searching page by id '{}'".format(content_id))
                 content = self._client.get_content_by_id(
                     content_id=content_id,
-                    expand='body.storage,space,ancestors'
+                    expand=self.EXPAND_FIELDS
                 )
             else:
                 assert space_key or title, "Can't search page without space key or title!"
@@ -32,7 +35,7 @@ class ConfluencePageCopier(object):
                 ))
                 content = self._client.get_content(
                     space_key=space_key, title=title,
-                    expand='body.storage,space,ancestors'
+                    expand=self.EXPAND_FIELDS
                 )
 
             self.log.debug('Found {} page(s)'.format(content['size']))
@@ -69,7 +72,7 @@ class ConfluencePageCopier(object):
         else:
             return "{title} ({counter})".format(title=title, counter=total)
 
-    def copy(self, src, dst_space_key=None, dst_title=None, force=False):
+    def copy(self, src, dst_space_key=None, dst_title=None, overwrite=False):
         source = self._find_page(**src)
         if not dst_space_key:
             src_space_key = source['space']['key']
@@ -83,38 +86,70 @@ class ConfluencePageCopier(object):
             else:
                 raise ValueError("Destination title is not given and could not be calculated!")
 
-        page_exists = self._find_page(space_key=dst_space_key, title=dst_title)
-        if page_exists:
-            if force:
-                self.log.debug("Forcing removal of existing page '{space}/{title}'".format(
-                    space=page_exists['space']['key'],
-                    title=page_exists['title']
-                ))
-                self._client.delete_content_by_id(page_exists['id'])
+        existing_dst_page = self._find_page(space_key=dst_space_key, title=dst_title)
+        if existing_dst_page:
+            if overwrite:
+                # Compare content and ancestors with existing before overwrite.
+                if (
+                    source['body']['storage']['value'] != existing_dst_page['body']['storage']['value']
+                ) or (
+                    source['ancestors'] != existing_dst_page['ancestors']
+                ):
+                    next_version = existing_dst_page['version']['number'] + 1
+                    self.log.debug("Overwriting existing '{space}/{title}' with {version} version".format(
+                        space=existing_dst_page['space']['key'],
+                        title=existing_dst_page['title'],
+                        version=next_version
+                    ))
+
+                    content_data = {
+                        'id': existing_dst_page['id'],
+                        'type': source['type'],
+                        'space': {'key': dst_space_key},
+                        'title': dst_title,
+                        'body': {
+                            'storage': {
+                                'value': source['body']['storage']['value'],
+                                'representation': 'storage'
+                            }
+                        },
+                        'ancestors': source['ancestors'],
+                        "version": {"number": next_version},
+                    }
+                    page_copy = self._client.update_content_by_id(
+                        content_data=content_data,
+                        content_id=existing_dst_page['id']
+                    )
+                else:
+                    self.log.debug("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
+                        space=existing_dst_page['space']['key'],
+                        title=existing_dst_page['title'],
+                    ))
+                    page_copy = existing_dst_page
             else:
                 raise RuntimeError("Can't copy to '{space}/{title}' as it already exists!".format(
                     space=dst_space_key,
                     title=dst_title
                 ))
-
-        self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
-            src_space=source['space']['key'],
-            src_title=source['title'],
-            dst_space=dst_space_key,
-            dst_title=dst_title,
-        ))
-        page_copy = self._client.create_new_content({
-            'type': source['type'],
-            'space': {'key': dst_space_key},
-            'title': dst_title,
-            'body': {
-                'storage': {
-                    'value': source['body']['storage']['value'],
-                    'representation': 'storage'
-                }
-            },
-            'ancestors': source['ancestors'],
-        })
+        else:
+            self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
+                src_space=source['space']['key'],
+                src_title=source['title'],
+                dst_space=dst_space_key,
+                dst_title=dst_title,
+            ))
+            page_copy = self._client.create_new_content({
+                'type': source['type'],
+                'space': {'key': dst_space_key},
+                'title': dst_title,
+                'body': {
+                    'storage': {
+                        'value': source['body']['storage']['value'],
+                        'representation': 'storage'
+                    }
+                },
+                'ancestors': source['ancestors'],
+            })
 
         labels = list()
         for label in self._client.get_content_labels(content_id=source['id'])['results']:
@@ -135,8 +170,8 @@ def init_args():
     parser.add_argument('--dst-space', help='Destination page space')
     parser.add_argument('--dst-title', help='Destination page title')
 
-    parser.add_argument('--force', action="store_true", default=False,
-                        help='Force page creation: if the same page already exists it will be removed.')
+    parser.add_argument('--overwrite', action="store_true", default=False,
+                        help='Overwrite page in case it already exists.')
 
     return parser.parse_args()
 
@@ -157,5 +192,5 @@ if __name__ == '__main__':
         },
         dst_space_key=args.dst_space,
         dst_title=args.dst_title,
-        force=args.force
+        overwrite=args.overwrite
     )
