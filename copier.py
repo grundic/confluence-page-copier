@@ -1,6 +1,9 @@
 #!/usr/bin/env python
+import os
 import re
+import shutil
 import logging
+import tempfile
 import argparse
 
 import requests
@@ -48,6 +51,9 @@ class ConfluencePageCopier(object):
 
         # copy labels
         self._copy_labels(source, page_copy)
+
+        # copy attachments
+        self._copy_attachments(source, page_copy)
 
         # recursively copy children
         children = self._client.get_content_children_by_type(content_id=source['id'], child_type='page')
@@ -140,12 +146,12 @@ class ConfluencePageCopier(object):
     def _overwrite_page(self, source, ancestor_id, existing_dst_page, dst_space_key, dst_title):
         src_ancestor_id = source['ancestors'][0]['id'] if source['ancestors'] else None
 
-        # TODO: https://answers.atlassian.com/questions/5278993/answers/11442314
         is_page_equal = True
         is_page_equal = is_page_equal and (
             source['body']['storage']['value'] == existing_dst_page['body']['storage']['value']
         )
-        is_page_equal = is_page_equal and ancestor_id == src_ancestor_id
+        # TODO: https://answers.atlassian.com/questions/5278993/answers/11442314
+        is_page_equal = is_page_equal and ancestor_id == existing_dst_page['ancestors'][-1]['id']
 
         if is_page_equal:
             self.log.debug("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
@@ -209,7 +215,46 @@ class ConfluencePageCopier(object):
         for label in self._client.get_content_labels(content_id=source['id'])['results']:
             labels.append({'prefix': label['prefix'], 'name': label['name']})
         if labels:
+            self.log.info("Copying {} label(s)".format(len(labels)))
             self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
+
+    def _copy_attachments(self, source, page_copy):
+        src_attachments = self._client.get_content_attachments(content_id=source['id'])['results']
+        if not src_attachments:
+            return
+
+        dst_attachments = self._client.get_content_attachments(content_id=page_copy['id'])['results']
+
+        self.log.info("Copying {} attachment(s)".format(len(src_attachments)))
+        temp_dir = tempfile.mkdtemp()
+        try:
+            for attachment in src_attachments:
+                self.log.debug("Downloading '{name}' attachment".format(name=attachment['title']))
+                content = self._client._service_get_request(sub_uri=attachment['_links']['download'][1:], raw=True)
+                filename = os.path.join(temp_dir, attachment['title'])
+                with open(filename, 'wb') as f:
+                    f.write(content)
+
+                for attach in dst_attachments:
+                    if attachment['title'] == attach['title']:
+                        self.log.debug("Updating existing attachment '{name}'".format(name=attachment['title']))
+                        with open(filename, 'rb') as f:
+                            self._client.update_attachment(
+                                content_id=page_copy['id'],
+                                attachment_id=attach['id'],
+                                attachment={'file': f}
+                            )
+                        break
+                else:
+                    self.log.debug("Creating new attachment '{name}'".format(name=attachment['title']))
+                    with open(filename, 'rb') as f:
+                        self._client.create_new_attachment_by_content_id(
+                            content_id=page_copy['id'],
+                            attachments={'file': f}
+                        )
+        finally:
+            self.log.debug("Removing temp directory '{}'".format(temp_dir))
+            shutil.rmtree(temp_dir)
 
 
 def init_args():
