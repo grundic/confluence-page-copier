@@ -144,8 +144,6 @@ class ConfluencePageCopier(object):
         return counter + 1
 
     def _overwrite_page(self, source, ancestor_id, existing_dst_page, dst_space_key, dst_title):
-        src_ancestor_id = source['ancestors'][0]['id'] if source['ancestors'] else None
-
         is_page_equal = True
         is_page_equal = is_page_equal and (
             source['body']['storage']['value'] == existing_dst_page['body']['storage']['value']
@@ -258,20 +256,46 @@ class ConfluencePageCopier(object):
 
 
 def init_args():
-    parser = argparse.ArgumentParser(description='Script for copying Confluence page')
+    parser = argparse.ArgumentParser(description='Script for smart copying Confluence pages.')
     parser.add_argument('--log-level',
                         choices=filter(lambda item: type(item) is not int, logging._levelNames.values()),
                         default='DEBUG', help='Log level')
 
-    parser.add_argument('--src-id', help='Source page id')
-    parser.add_argument('--src-space', help='Source page space')
-    parser.add_argument('--src-title', help='Source page title')
+    parser.add_argument(
+        '--src-id',
+        help=(
+            'Source page id. Using this parameter precisely determines the page (if it exists). '
+            'In case this parameter is set, `--src-space` and `--src-title` parameters are ignored.'
+        )
+    )
+    parser.add_argument(
+        '--src-space',
+        help='Source page space. This parameter could be skipped, then script will try to find page by title only.'
+    )
+    parser.add_argument(
+        '--src-title',
+        help='Source page title. Should unambiguously determine page.'
+    )
 
-    parser.add_argument('--dst-space', help='Destination page space')
-    parser.add_argument('--dst-title-template', help='Destination page title')
+    parser.add_argument(
+        '--dst-space',
+        help='Destination page space. If not set, then source space will be used (after it will be found).')
+    parser.add_argument(
+        '--dst-title-template',
+        default=ConfluencePageCopier.DEFAULT_TEMPLATE,
+        help=(
+            "Destination page title template. "
+            "This parameter supports meta variables: '{title}' and '{counter}'. "
+            "You can use this parameter to set various suffixes/prefixes for resulting pages. "
+            "Also, '{counter}' parameter allows you to create multiple copies of the same page "
+            "incrementing counter in title.".format(
+                title=ConfluencePageCopier.TITLE_FIELD, counter=ConfluencePageCopier.COUNTER_FIELD
+            )
+        )
+    )
 
     parser.add_argument('--overwrite', action="store_true", default=False,
-                        help='Overwrite page in case it already exists.')
+                        help='Overwrite page in case it already exists. Otherwise script will raise an exception.')
 
     return parser.parse_args()
 
