@@ -46,11 +46,8 @@ class ConfluencePageCopier(object):
         else:
             page_copy = self._copy_page(source, ancestor_id, dst_space_key, dst_title)
 
-        labels = list()
-        for label in self._client.get_content_labels(content_id=source['id'])['results']:
-            labels.append({'prefix': label['prefix'], 'name': label['name']})
-        if labels:
-            self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
+        # copy labels
+        self._copy_labels(source, page_copy)
 
         # recursively copy children
         children = self._client.get_content_children_by_type(content_id=source['id'], child_type='page')
@@ -145,8 +142,9 @@ class ConfluencePageCopier(object):
 
         # TODO: https://answers.atlassian.com/questions/5278993/answers/11442314
         is_page_equal = True
-        is_page_equal = is_page_equal and source['body']['storage']['value'] == existing_dst_page['body']['storage'][
-            'value']
+        is_page_equal = is_page_equal and (
+            source['body']['storage']['value'] == existing_dst_page['body']['storage']['value']
+        )
         is_page_equal = is_page_equal and ancestor_id == src_ancestor_id
 
         if is_page_equal:
@@ -205,6 +203,13 @@ class ConfluencePageCopier(object):
         })
 
         return page_copy
+
+    def _copy_labels(self, source, page_copy):
+        labels = list()
+        for label in self._client.get_content_labels(content_id=source['id'])['results']:
+            labels.append({'prefix': label['prefix'], 'name': label['name']})
+        if labels:
+            self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
 
 
 def init_args():
