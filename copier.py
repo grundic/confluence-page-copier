@@ -12,15 +12,48 @@ from PythonConfluenceAPI import ConfluenceAPI
 __author__ = 'Grigory Chernyshev <systray@yandex.ru>'
 
 
+class ConfluenceAPIDryRunProxy(ConfluenceAPI):
+
+    MOD_METH_RE = re.compile(r'^(create|update|convert|delete)_.*$')
+
+    def __init__(self, username, password, uri_base, user_agent=ConfluenceAPI.DEFAULT_USER_AGENT, dry_run=False):
+        super(ConfluenceAPIDryRunProxy, self).__init__(username, password, uri_base, user_agent)
+        self._dry_run = dry_run
+        self.log = logging.getLogger('api-proxy')
+
+    def __getattribute__(self, name):
+        attr = object.__getattribute__(self, name)
+        is_dry = object.__getattribute__(self, '_dry_run')
+        if is_dry and hasattr(attr, '__call__') and self.MOD_METH_RE.match(name):
+            def dry_run(*args, **kwargs):
+                func_args = list()
+                if args:
+                    func_args.extend(str(a) for a in args)
+                if kwargs:
+                    func_args.extend('%s=%s' % (k, v) for k, v in kwargs.items())
+
+                self.log.info("[DRY-RUN] {name}({func_args})".format(name=name, func_args=', '.join(func_args)))
+
+            return dry_run
+        else:
+            return attr
+
+
 class ConfluencePageCopier(object):
     EXPAND_FIELDS = 'body.storage,space,ancestors,version'
     TITLE_FIELD = '{title}'
     COUNTER_FIELD = '{counter}'
     DEFAULT_TEMPLATE = '{t} ({c})'.format(t=TITLE_FIELD, c=COUNTER_FIELD)
 
-    def __init__(self, username='admin', password='admin', uri_base='http://localhost:1990/confluence'):
+    def __init__(self, username='admin', password='admin', uri_base='http://localhost:1990/confluence', dry_run=False):
         self.log = logging.getLogger('confl-copier')
-        self._client = ConfluenceAPI(username, password, uri_base)
+        self._dry_run = dry_run
+        self._client = ConfluenceAPIDryRunProxy(
+            username=username,
+            password=password,
+            uri_base=uri_base,
+            dry_run=dry_run
+        )
 
     def copy(self, src, dst_space_key=None, dst_title_template=None, ancestor_id=None, overwrite=False):
         source = self._find_page(**src)
@@ -49,11 +82,16 @@ class ConfluencePageCopier(object):
         else:
             page_copy = self._copy_page(source, ancestor_id, dst_space_key, dst_title)
 
+        if self._dry_run:
+            page_copy_id = -1
+        else:
+            page_copy_id = page_copy['id']
+
         # copy labels
-        self._copy_labels(source, page_copy)
+        self._copy_labels(source, page_copy_id)
 
         # copy attachments
-        self._copy_attachments(source, page_copy)
+        self._copy_attachments(source, page_copy_id)
 
         # recursively copy children
         children = self._client.get_content_children_by_type(content_id=source['id'], child_type='page')
@@ -63,7 +101,7 @@ class ConfluencePageCopier(object):
                     src={'content_id': child['id']},
                     dst_space_key=dst_space_key,
                     dst_title_template=dst_title_template,
-                    ancestor_id=page_copy['id'],
+                    ancestor_id=page_copy_id,
                     overwrite=overwrite
                 )
 
@@ -152,14 +190,14 @@ class ConfluencePageCopier(object):
         is_page_equal = is_page_equal and ancestor_id == existing_dst_page['ancestors'][-1]['id']
 
         if is_page_equal:
-            self.log.debug("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
+            self.log.info("Skipping '{space}/{title}' overwrite, as it's the same as original".format(
                 space=existing_dst_page['space']['key'],
                 title=existing_dst_page['title'],
             ))
             return existing_dst_page
 
         next_version = existing_dst_page['version']['number'] + 1
-        self.log.debug("Overwriting existing '{space}/{title}' with {version} version".format(
+        self.log.info("Overwriting existing '{space}/{title}' with {version} version".format(
             space=existing_dst_page['space']['key'],
             title=existing_dst_page['title'],
             version=next_version
@@ -208,20 +246,23 @@ class ConfluencePageCopier(object):
 
         return page_copy
 
-    def _copy_labels(self, source, page_copy):
+    def _copy_labels(self, source, page_copy_id):
         labels = list()
         for label in self._client.get_content_labels(content_id=source['id'])['results']:
             labels.append({'prefix': label['prefix'], 'name': label['name']})
         if labels:
             self.log.info("Copying {} label(s)".format(len(labels)))
-            self._client.create_new_label_by_content_id(content_id=page_copy['id'], label_names=labels)
+            self._client.create_new_label_by_content_id(content_id=page_copy_id, label_names=labels)
 
-    def _copy_attachments(self, source, page_copy):
+    def _copy_attachments(self, source, page_copy_id):
         src_attachments = self._client.get_content_attachments(content_id=source['id'])['results']
         if not src_attachments:
             return
 
-        dst_attachments = self._client.get_content_attachments(content_id=page_copy['id'])['results']
+        if self._dry_run:
+            dst_attachments = list()
+        else:
+            dst_attachments = self._client.get_content_attachments(content_id=page_copy_id)['results']
 
         self.log.info("Copying {} attachment(s)".format(len(src_attachments)))
         temp_dir = tempfile.mkdtemp()
@@ -238,7 +279,7 @@ class ConfluencePageCopier(object):
                         self.log.debug("Updating existing attachment '{name}'".format(name=attachment['title']))
                         with open(filename, 'rb') as f:
                             self._client.update_attachment(
-                                content_id=page_copy['id'],
+                                content_id=page_copy_id,
                                 attachment_id=attach['id'],
                                 attachment={'file': f}
                             )
@@ -247,7 +288,7 @@ class ConfluencePageCopier(object):
                     self.log.debug("Creating new attachment '{name}'".format(name=attachment['title']))
                     with open(filename, 'rb') as f:
                         self._client.create_new_attachment_by_content_id(
-                            content_id=page_copy['id'],
+                            content_id=page_copy_id,
                             attachments={'file': f}
                         )
         finally:
@@ -297,6 +338,9 @@ def init_args():
     parser.add_argument('--overwrite', action="store_true", default=False,
                         help='Overwrite page in case it already exists. Otherwise script will raise an exception.')
 
+    parser.add_argument('--dry-run', action="store_true", default=False,
+                        help='Using this flag would just log all actions without actually copying anything.')
+
     return parser.parse_args()
 
 
@@ -306,7 +350,7 @@ if __name__ == '__main__':
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("PythonConfluenceAPI.api").setLevel(logging.WARNING)
 
-    copier = ConfluencePageCopier()
+    copier = ConfluencePageCopier(dry_run=args.dry_run)
 
     copier.copy(
         src={
