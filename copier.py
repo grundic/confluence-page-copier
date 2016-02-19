@@ -45,7 +45,7 @@ class ConfluencePageCopier(object):
     COUNTER_FIELD = '{counter}'
     DEFAULT_TEMPLATE = '{t} ({c})'.format(t=TITLE_FIELD, c=COUNTER_FIELD)
 
-    def __init__(self, username='admin', password='admin', uri_base='http://localhost:1990/confluence', dry_run=False):
+    def __init__(self, username, password, uri_base, dry_run=False):
         self.log = logging.getLogger('confl-copier')
         self._dry_run = dry_run
         self._client = ConfluenceAPIDryRunProxy(
@@ -323,6 +323,24 @@ def init_args():
                         default='DEBUG', help='Log level')
 
     parser.add_argument(
+        '--username',
+        default='admin',
+        help='Username for Confluence.'
+    )
+
+    parser.add_argument(
+        '--password',
+        default='admin',
+        help='Password for Confluence.'
+    )
+
+    parser.add_argument(
+        '--endpoint',
+        default='http://localhost:1990/confluence',
+        help='Confluence endpoine.'
+    )
+
+    parser.add_argument(
         '--src-id',
         help=(
             'Source page id. Using this parameter precisely determines the page (if it exists). '
@@ -383,7 +401,12 @@ if __name__ == '__main__':
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("PythonConfluenceAPI.api").setLevel(logging.WARNING)
 
-    copier = ConfluencePageCopier(dry_run=args.dry_run)
+    copier = ConfluencePageCopier(
+        username=args.username,
+        password=args.password,
+        uri_base=args.endpoint,
+        dry_run=args.dry_run
+    )
 
     copier.copy(
         src={
