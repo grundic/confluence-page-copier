@@ -63,7 +63,8 @@ class ConfluencePageCopier(object):
         ancestor_id=None,
         overwrite=False,
         skip_labels=False,
-        skip_attachments=False
+        skip_attachments=False,
+        recursion_limit=None
     ):
         source = self._find_page(**src)
         dst_space_key, dst_title_template = self._init_destination_page(source, dst_space_key, dst_title_template)
@@ -104,16 +105,24 @@ class ConfluencePageCopier(object):
             # copy attachments
             self._copy_attachments(source, page_copy_id)
 
+        if recursion_limit is not None and recursion_limit <= 0:
+            self.log.debug("Breaking copy cycle as recursion limit is reached.")
+            return
+
         # recursively copy children
         children = self._client.get_content_children_by_type(content_id=source['id'], child_type='page')
         if children and children.get('results'):
+            if recursion_limit is not None:
+                recursion_limit -= 1
+
             for child in children['results']:
                 self.copy(
                     src={'content_id': child['id']},
                     dst_space_key=dst_space_key,
                     dst_title_template=dst_title_template,
                     ancestor_id=page_copy_id,
-                    overwrite=overwrite
+                    overwrite=overwrite,
+                    recursion_limit=recursion_limit
                 )
 
     def _find_page(self, content_id=None, space_key=None, title=None):
@@ -358,6 +367,13 @@ def init_args():
     parser.add_argument('--skip-attachments', action="store_true", default=False,
                         help='Use this flag to skip attachments copying.')
 
+    parser.add_argument('--recursion-limit', type=int, default=None,
+                        help='Set recursion limit for copying pages. Setting thin parameter you can choose '
+                             'how deep should script go when copying pages. By default limit is not set and all '
+                             'children are copied. Setting zero would result in copying only one page without '
+                             'any children. Setting to 1 will copy only direct pages etc.'
+                        )
+
     return parser.parse_args()
 
 
@@ -380,4 +396,5 @@ if __name__ == '__main__':
         overwrite=args.overwrite,
         skip_labels=args.skip_labels,
         skip_attachments=args.skip_attachments,
+        recursion_limit=args.recursion_limit
     )
