@@ -12,7 +12,7 @@ Also it's a good idea firstly use `--dry-run` flag which prevent any creations o
 script and examine it's output.
 
 If you don't need to copy page's children, you can set `--recursion-limit` parameter to `0`. Obviously, you can use
-this parameter to control recursion limit of children pages that you wish to copy.
+this parameter to control recursion limit of children pages that you wish to copy.x
 
 ## Examples
 ```bash
@@ -31,3 +31,7 @@ create multiple copies without warring about conflicts in names.
 ## Similar software
  * [Copy Page Tree](https://marketplace.atlassian.com/plugins/com.nurago.confluence.plugins.treecopy/cloud/overview): Confluence AddOn that adds a "Page Tree Copy" action to copy an entire page tree/hierarchy.
  * [Confluence Command Line Interface](https://bobswift.atlassian.net/wiki/display/CSOAP/Reference#Reference-copyPage): A command line interface (CLI) for remotely accessing Confluence.
+
+
+# License
+### MIT
