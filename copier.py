@@ -55,7 +55,16 @@ class ConfluencePageCopier(object):
             dry_run=dry_run
         )
 
-    def copy(self, src, dst_space_key=None, dst_title_template=None, ancestor_id=None, overwrite=False):
+    def copy(
+        self,
+        src,
+        dst_space_key=None,
+        dst_title_template=None,
+        ancestor_id=None,
+        overwrite=False,
+        skip_labels=False,
+        skip_attachments=False
+    ):
         source = self._find_page(**src)
         dst_space_key, dst_title_template = self._init_destination_page(source, dst_space_key, dst_title_template)
         dst_title = dst_title_template.format(title=source['title'])
@@ -87,11 +96,13 @@ class ConfluencePageCopier(object):
         else:
             page_copy_id = page_copy['id']
 
-        # copy labels
-        self._copy_labels(source, page_copy_id)
+        if not skip_labels:
+            # copy labels
+            self._copy_labels(source, page_copy_id)
 
-        # copy attachments
-        self._copy_attachments(source, page_copy_id)
+        if not skip_attachments:
+            # copy attachments
+            self._copy_attachments(source, page_copy_id)
 
         # recursively copy children
         children = self._client.get_content_children_by_type(content_id=source['id'], child_type='page')
@@ -341,6 +352,12 @@ def init_args():
     parser.add_argument('--dry-run', action="store_true", default=False,
                         help='Using this flag would just log all actions without actually copying anything.')
 
+    parser.add_argument('--skip-labels', action="store_true", default=False,
+                        help='Use this flag to skip labels copying.')
+
+    parser.add_argument('--skip-attachments', action="store_true", default=False,
+                        help='Use this flag to skip attachments copying.')
+
     return parser.parse_args()
 
 
@@ -360,5 +377,7 @@ if __name__ == '__main__':
         },
         dst_space_key=args.dst_space,
         dst_title_template=args.dst_title_template,
-        overwrite=args.overwrite
+        overwrite=args.overwrite,
+        skip_labels=args.skip_labels,
+        skip_attachments=args.skip_attachments,
     )
