@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 import os
 import re
 import shutil
@@ -85,7 +86,7 @@ class ConfluencePageCopier(object):
             if overwrite:
                 page_copy = self._overwrite_page(source, ancestor_id, existing_dst_page, dst_space_key, dst_title)
             else:
-                raise RuntimeError("Can't copy to '{space}/{title}' as it already exists!".format(
+                raise RuntimeError(u"Can't copy to '{space}/{title}' as it already exists!".format(
                     space=dst_space_key,
                     title=dst_title
                 ))
@@ -137,10 +138,15 @@ class ConfluencePageCopier(object):
             else:
                 assert space_key or title, "Can't search page without space key or title!"
 
-                self.log.debug("Searching page by{space}{and_msg}{title}".format(
-                    space=" space '%s'" % space_key if space_key else '',
-                    and_msg=" and" if space_key and title else '',
-                    title=" title '%s'" % title if title else ''
+                if not isinstance(space_key, unicode):
+                    space_key = space_key.decode('utf-8')
+
+                if not isinstance(title, unicode):
+                    title = title.decode('utf-8')
+                self.log.debug(u"Searching page by{space}{and_msg}{title}".format(
+                    space=u" space '%s'" % space_key if space_key else '',
+                    and_msg=u" and" if space_key and title else '',
+                    title=u" title '%s'" % title if title else ''
                 ))
                 content = self._client.get_content(
                     space_key=space_key, title=title,
@@ -184,16 +190,16 @@ class ConfluencePageCopier(object):
             # can't use `format` here, because there are other fields that should not be formatted yet ({title})
             title_template = title_template.replace(self.COUNTER_FIELD, str(counter))
 
-        return dst_space_key, title_template
+        return dst_space_key, unicode(title_template)
 
     def _get_title_counter(self, space_key, title, template):
         counter = 0
         template = template.replace(self.TITLE_FIELD, title)
         template = re.escape(template)
         template = template.replace(re.escape(self.COUNTER_FIELD), '\d+')
-        regex = re.compile("^{template}$".format(template=template))
-        search_results = self._client.search_content(cql_str='space = {space} and title ~ "{title}"'.format(
-            space=space_key, title=title
+        regex = re.compile(u"^{template}$".format(template=template))
+        search_results = self._client.search_content(cql_str='space = "{space}" and title ~ "{title}"'.format(
+            space=space_key.encode('utf-8'), title=title.encode('utf-8')
         ))
         for result in search_results['results']:
             if regex.match(result['title']):
@@ -245,7 +251,7 @@ class ConfluencePageCopier(object):
         return page_copy
 
     def _copy_page(self, source, ancestor_id, dst_space_key, dst_title):
-        self.log.info("Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
+        self.log.info(u"Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
             src_space=source['space']['key'],
             src_title=source['title'],
             dst_space=dst_space_key,
