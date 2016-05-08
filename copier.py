@@ -123,7 +123,9 @@ class ConfluencePageCopier(object):
                     dst_title_template=dst_title_template,
                     ancestor_id=page_copy_id,
                     overwrite=overwrite,
-                    recursion_limit=recursion_limit
+                    recursion_limit=recursion_limit,
+                    skip_labels=skip_labels,
+                    skip_attachments=skip_attachments
                 )
 
     def _find_page(self, content_id=None, space_key=None, title=None):
