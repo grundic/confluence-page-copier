@@ -14,6 +14,9 @@ script and examine it's output.
 If you don't need to copy page's children, you can set `--recursion-limit` parameter to `0`. Obviously, you can use
 this parameter to control recursion limit of children pages that you wish to copy.x
 
+## Install
+pip install -r requirements.txt
+
 ## Examples
 ```bash
 python copier.py --src-space=SPACE --src-title="Simple Page" --dst-title-template="Prefix {title} Suffix"
