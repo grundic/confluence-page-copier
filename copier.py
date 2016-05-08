@@ -295,7 +295,8 @@ class ConfluencePageCopier(object):
         try:
             for attachment in src_attachments:
                 self.log.debug("Downloading '{name}' attachment".format(name=attachment['title']))
-                content = self._client._service_get_request(sub_uri=attachment['_links']['download'][1:], raw=True)
+                link_name=attachment['_links']['download'][1:].encode('utf8')
+                content = self._client._service_get_request(sub_uri=link_name, raw=True)
                 filename = os.path.join(temp_dir, attachment['title'])
                 with open(filename, 'wb') as f:
                     f.write(content)
