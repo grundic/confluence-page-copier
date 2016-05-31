@@ -69,7 +69,7 @@ class ConfluencePageCopier(object):
     ):
         source = self._find_page(**src)
         dst_space_key, dst_title_template = self._init_destination_page(source, dst_space_key, dst_title_template)
-        dst_title = dst_title_template.format(title=source['title'])
+        dst_title = dst_title_template.replace('{title}', source['title'])
 
         # ancestor_id determines parent of the page being copied. If it's not provided, we take it from source page.
         # If source page doesn't have ancestors, that means that it's root page, so we will copy to the root as well.
@@ -138,7 +138,7 @@ class ConfluencePageCopier(object):
             else:
                 assert space_key or title, "Can't search page without space key or title!"
 
-                if not isinstance(space_key, unicode):
+                if space_key and not isinstance(space_key, unicode):
                     space_key = space_key.decode('utf-8')
 
                 if not isinstance(title, unicode):
