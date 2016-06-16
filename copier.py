@@ -2,6 +2,7 @@
 # coding=utf-8
 import os
 import re
+import urllib
 import shutil
 import logging
 import tempfile
@@ -74,7 +75,7 @@ class ConfluencePageCopier(object):
         # ancestor_id determines parent of the page being copied. If it's not provided, we take it from source page.
         # If source page doesn't have ancestors, that means that it's root page, so we will copy to the root as well.
         if not ancestor_id:
-            if source['ancestors']:
+            if source['ancestors'] and source['space']['key'] == dst_space_key:
                 self.log.debug('Setting ancestor id to {}'.format(source['ancestors'][0]['id']))
                 ancestor_id = source['ancestors'][0]['id']
             else:
@@ -201,7 +202,7 @@ class ConfluencePageCopier(object):
         template = template.replace(re.escape(self.COUNTER_FIELD), '\d+')
         regex = re.compile(u"^{template}$".format(template=template))
         search_results = self._client.search_content(cql_str='space = "{space}" and title ~ "{title}"'.format(
-            space=space_key.encode('utf-8'), title=title.encode('utf-8')
+            space=space_key.encode('utf-8'), title=urllib.quote_plus(title.encode('utf-8'))
         ))
         for result in search_results['results']:
             if regex.match(result['title']):
@@ -269,7 +270,7 @@ class ConfluencePageCopier(object):
                     'representation': 'storage'
                 }
             },
-            'ancestors': [{'id': ancestor_id}],
+            'ancestors': [] if not ancestor_id else [{'id': ancestor_id}],
         })
 
         return page_copy
