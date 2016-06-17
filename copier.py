@@ -10,12 +10,12 @@ import argparse
 
 import requests
 from PythonConfluenceAPI import ConfluenceAPI
+from boltons.cacheutils import LRU, cachedmethod
 
 __author__ = 'Grigory Chernyshev <systray@yandex.ru>'
 
 
 class ConfluenceAPIDryRunProxy(ConfluenceAPI):
-
     MOD_METH_RE = re.compile(r'^(create|update|convert|delete)_.*$')
 
     def __init__(self, username, password, uri_base, user_agent=ConfluenceAPI.DEFAULT_USER_AGENT, dry_run=False):
@@ -57,16 +57,20 @@ class ConfluencePageCopier(object):
             dry_run=dry_run
         )
 
+        self._cache = LRU()
+
     def copy(
-        self,
-        src,
-        dst_space_key=None,
-        dst_title_template=None,
-        ancestor_id=None,
-        overwrite=False,
-        skip_labels=False,
-        skip_attachments=False,
-        recursion_limit=None
+            self,
+            src,
+            dst_space_key=None,
+            dst_title_template=None,
+            dst_parent_id=None,
+            dst_parent_title=None,
+            ancestor_id=None,
+            overwrite=False,
+            skip_labels=False,
+            skip_attachments=False,
+            recursion_limit=None
     ):
         source = self._find_page(**src)
         dst_space_key, dst_title_template = self._init_destination_page(source, dst_space_key, dst_title_template)
@@ -78,6 +82,11 @@ class ConfluencePageCopier(object):
             if source['ancestors'] and source['space']['key'] == dst_space_key:
                 self.log.debug('Setting ancestor id to {}'.format(source['ancestors'][0]['id']))
                 ancestor_id = source['ancestors'][0]['id']
+            elif dst_parent_id is not None:
+                ancestor_id = dst_parent_id
+            elif dst_parent_title is not None:
+                dst_parent = self._find_page(space_key=dst_space_key, title=dst_parent_title)
+                ancestor_id = dst_parent['id']
             else:
                 ancestor_id = None
 
@@ -129,6 +138,7 @@ class ConfluencePageCopier(object):
                     skip_attachments=skip_attachments
                 )
 
+    @cachedmethod('_cache')
     def _find_page(self, content_id=None, space_key=None, title=None):
         try:
             if content_id:
@@ -254,12 +264,26 @@ class ConfluencePageCopier(object):
         return page_copy
 
     def _copy_page(self, source, ancestor_id, dst_space_key, dst_title):
-        self.log.info(u"Copying '{src_space}/{src_title}' => '{dst_space}/{dst_title}'".format(
-            src_space=source['space']['key'],
-            src_title=source['title'],
-            dst_space=dst_space_key,
-            dst_title=dst_title,
-        ))
+        src_parent_page = None
+        dst_parent_page = None
+
+        if source['ancestors']:
+            src_parent_page = self._find_page(content_id=source['ancestors'][0]['id'])
+        if ancestor_id:
+            dst_parent_page = self._find_page(content_id=ancestor_id)
+
+        self.log.info(
+            (
+                u"Copying [{src_space}]:'{src_parent_title}'/'{src_title}' => "
+                u"[{dst_space}]:'{dst_parent_title}'/'{dst_title}'"
+            ).format(
+                src_space=source['space']['key'],
+                src_parent_title=src_parent_page['title'] if src_parent_page else '',
+                src_title=source['title'],
+                dst_space=dst_space_key,
+                dst_parent_title=dst_parent_page['title'] if dst_parent_page else '',
+                dst_title=dst_title,
+            ))
         page_copy = self._client.create_new_content({
             'type': source['type'],
             'space': {'key': dst_space_key},
@@ -298,7 +322,7 @@ class ConfluencePageCopier(object):
         try:
             for attachment in src_attachments:
                 self.log.debug("Downloading '{name}' attachment".format(name=attachment['title']))
-                link_name=attachment['_links']['download'][1:].encode('utf8')
+                link_name = attachment['_links']['download'][1:].encode('utf8')
                 content = self._client._service_get_request(sub_uri=link_name, raw=True)
                 filename = os.path.join(temp_dir, attachment['title'])
                 with open(filename, 'wb') as f:
@@ -382,6 +406,22 @@ def init_args():
             )
         )
     )
+    parser.add_argument(
+        '--dst-parent-id',
+        help=(
+            'ID of destination parent page. Setting this parameter '
+            'would make script put original page tree under specified page. '
+            'This parameter has precedence over `--dst-parent-title`.'
+        )
+    )
+    parser.add_argument(
+        '--dst-parent-title',
+        help=(
+            'Title of destination parent page. Setting this parameter '
+            'would make script put original page tree under specified page. '
+            'Should unambiguously determine single page.'
+        )
+    )
 
     parser.add_argument('--overwrite', action="store_true", default=False,
                         help='Overwrite page in case it already exists. Otherwise script will raise an exception.')
@@ -426,6 +466,8 @@ if __name__ == '__main__':
         },
         dst_space_key=args.dst_space,
         dst_title_template=args.dst_title_template,
+        dst_parent_id=args.dst_parent_id,
+        dst_parent_title=args.dst_parent_title,
         overwrite=args.overwrite,
         skip_labels=args.skip_labels,
         skip_attachments=args.skip_attachments,
