@@ -140,48 +140,44 @@ class ConfluencePageCopier(object):
 
     @cachedmethod('_cache')
     def _find_page(self, content_id=None, space_key=None, title=None):
-        try:
-            if content_id:
-                self.log.debug("Searching page by id '{}'".format(content_id))
-                content = self._client.get_content_by_id(
-                    content_id=content_id,
-                    expand=self.EXPAND_FIELDS
-                )
-                return content
-            else:
-                assert space_key or title, "Can't search page without space key or title!"
 
-                if space_key and not isinstance(space_key, unicode):
-                    space_key = space_key.decode('utf-8')
+        if content_id:
+            self.log.debug("Searching page by id '{}'".format(content_id))
+            content = self._client.get_content_by_id(
+                content_id=content_id,
+                expand=self.EXPAND_FIELDS
+            )
+            return content
+        else:
+            assert space_key or title, "Can't search page without space key or title!"
 
-                if not isinstance(title, unicode):
-                    title = title.decode('utf-8')
-                self.log.debug(u"Searching page by{space}{and_msg}{title}".format(
-                    space=u" space '%s'" % space_key if space_key else '',
-                    and_msg=u" and" if space_key and title else '',
-                    title=u" title '%s'" % title if title else ''
-                ))
-                content = self._client.get_content(
-                    space_key=space_key, title=title,
-                    expand=self.EXPAND_FIELDS
-                )
+            if space_key and not isinstance(space_key, unicode):
+                space_key = space_key.decode('utf-8')
 
-                self.log.debug('Found {} page(s)'.format(content['size']))
-                if content['size'] == 0:
-                    return None
-                elif content['size'] == 1:
-                    return content['results'][0]
-                else:
-                    spaces = set([r['space']['name'] for r in content['results']])
-                    raise ValueError(
-                        "Unexpected result count: {count}, possibly you have to specify space to search in. "
-                        "Results includes these spaces: {spaces}".format(
-                            count=content['size'], spaces=', '.join(spaces))
-                    )
-        except requests.exceptions.HTTPError as e:
-            if 400 <= e.response.status_code < 500:
+            if not isinstance(title, unicode):
+                title = title.decode('utf-8')
+            self.log.debug(u"Searching page by{space}{and_msg}{title}".format(
+                space=u" space '%s'" % space_key if space_key else '',
+                and_msg=u" and" if space_key and title else '',
+                title=u" title '%s'" % title if title else ''
+            ))
+            content = self._client.get_content(
+                space_key=space_key, title=title,
+                expand=self.EXPAND_FIELDS
+            )
+
+            self.log.debug('Found {} page(s)'.format(content['size']))
+            if content['size'] == 0:
                 return None
-            raise
+            elif content['size'] == 1:
+                return content['results'][0]
+            else:
+                spaces = set([r['space']['name'] for r in content['results']])
+                raise ValueError(
+                    "Unexpected result count: {count}, possibly you have to specify space to search in. "
+                    "Results includes these spaces: {spaces}".format(
+                        count=content['size'], spaces=', '.join(spaces))
+                )
 
     def _init_destination_page(self, source, dst_space_key, title_template):
         if not dst_space_key:
