@@ -31,6 +31,31 @@ python copier.py --src-id=12345 --dst-title-template="{title} ({counter})"
 This command will create a copy of page with id `12345` and add a counter to the title of copied page. This way you can
 create multiple copies without warring about conflicts in names.
 
+Here how output from script could look like:
+```
+DEBUG:confl-copier:Searching page by title 'Page tree -- one'
+DEBUG:confl-copier:Found 1 page(s)
+DEBUG:confl-copier:Searching page by space 'TWO' and title 'Page tree -- one (4)'
+DEBUG:confl-copier:Found 0 page(s)
+DEBUG:confl-copier:Searching page by id '753678'
+DEBUG:confl-copier:Searching page by id '753736'
+INFO:confl-copier:Copying [ONE]:'First space Home'/'Page tree -- one' => [TWO]:'Simple page (2)'/'Page tree -- one (4)'
+DEBUG:confl-copier:Searching page by id '753684'
+DEBUG:confl-copier:Searching page by space 'TWO' and title 'Страничка с русскими символами (4)'
+DEBUG:confl-copier:Found 0 page(s)
+DEBUG:confl-copier:Searching page by id '753747'
+INFO:confl-copier:Copying [ONE]:'First space Home'/'Страничка с русскими символами' => [TWO]:'Page tree -- one (4)'/'Страничка с русскими символами (4)'
+DEBUG:confl-copier:Searching page by id '753686'
+DEBUG:confl-copier:Searching page by space 'TWO' and title 'WTF?!@#$%^&*()_+`1234567890-=\/ (4)'
+DEBUG:confl-copier:Found 0 page(s)
+DEBUG:confl-copier:Searching page by id '753748'
+INFO:confl-copier:Copying [ONE]:'First space Home'/'WTF?!@#$%^&*()_+`1234567890-=\/' => [TWO]:'Страничка с русскими символами (4)'/'WTF?!@#$%^&*()_+`1234567890-=\/ (4)'
+INFO:confl-copier:Copying 1 attachment(s)
+DEBUG:confl-copier:Downloading 'corpus-example.txt' attachment
+DEBUG:confl-copier:Creating new attachment 'corpus-example.txt'
+DEBUG:confl-copier:Removing temp directory '/var/folders/sd/ztpl1rh170542b20sd94dw4d5qz_tc/T/tmpLQUsPI'
+```
+
 ## Similar software
  * [Copy Page Tree](https://marketplace.atlassian.com/plugins/com.nurago.confluence.plugins.treecopy/cloud/overview): Confluence AddOn that adds a "Page Tree Copy" action to copy an entire page tree/hierarchy.
  * [Confluence Command Line Interface](https://bobswift.atlassian.net/wiki/display/CSOAP/Reference#Reference-copyPage): A command line interface (CLI) for remotely accessing Confluence.
