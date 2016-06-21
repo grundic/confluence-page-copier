@@ -317,7 +317,8 @@ class ConfluencePageCopier(object):
         temp_dir = tempfile.mkdtemp()
         try:
             for attachment in src_attachments:
-                self.log.debug("Downloading '{name}' attachment".format(name=attachment['title']))
+                attachment_name = attachment['title'].encode('utf8')
+                self.log.debug("Downloading '{name}' attachment".format(name=attachment_name))
                 link_name = attachment['_links']['download'][1:].encode('utf8')
                 content = self._client._service_get_request(sub_uri=link_name, raw=True)
                 filename = os.path.join(temp_dir, attachment['title'])
@@ -326,7 +327,7 @@ class ConfluencePageCopier(object):
 
                 for attach in dst_attachments:
                     if attachment['title'] == attach['title']:
-                        self.log.debug("Updating existing attachment '{name}'".format(name=attachment['title']))
+                        self.log.debug("Updating existing attachment '{name}'".format(name=attachment_name))
                         with open(filename, 'rb') as f:
                             self._client.update_attachment(
                                 content_id=page_copy_id,
@@ -335,7 +336,7 @@ class ConfluencePageCopier(object):
                             )
                         break
                 else:
-                    self.log.debug("Creating new attachment '{name}'".format(name=attachment['title']))
+                    self.log.debug("Creating new attachment '{name}'".format(name=attachment_name))
                     with open(filename, 'rb') as f:
                         self._client.create_new_attachment_by_content_id(
                             content_id=page_copy_id,
