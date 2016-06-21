@@ -104,7 +104,7 @@ class ConfluencePageCopier(object):
             page_copy = self._copy_page(source, ancestor_id, dst_space_key, dst_title)
 
         if self._dry_run:
-            page_copy_id = -1
+            page_copy_id = source['id']
         else:
             page_copy_id = page_copy['id']
 
