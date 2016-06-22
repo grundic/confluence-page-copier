@@ -320,6 +320,8 @@ class ConfluencePageCopier(object):
             if not self._dry_run:
                 link_name = attachment['_links']['download'][1:].encode('utf8')
                 content = self._client._service_get_request(sub_uri=link_name, raw=True)
+            else:
+                content = None
 
             for attach in dst_attachments:
                 if attachment['title'] == attach['title']:
