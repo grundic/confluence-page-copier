@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
-import os
 import re
 import urllib
-import shutil
 import logging
-import tempfile
 import argparse
 
-import requests
 from PythonConfluenceAPI import ConfluenceAPI
 from boltons.cacheutils import LRU, cachedmethod
 
@@ -314,37 +310,39 @@ class ConfluencePageCopier(object):
             dst_attachments = self._client.get_content_attachments(content_id=page_copy_id)['results']
 
         self.log.info("Copying {} attachment(s)".format(len(src_attachments)))
-        temp_dir = tempfile.mkdtemp()
-        try:
-            for attachment in src_attachments:
-                attachment_name = attachment['title'].encode('utf8')
-                self.log.debug("Downloading '{name}' attachment".format(name=attachment_name))
+
+        for attachment in src_attachments:
+            attachment_name = attachment['title'].encode('utf8')
+            attachment_type = attachment['metadata']['mediaType']
+            attachment_comment = attachment['metadata']['comment']
+            self.log.debug("Downloading '{name}' attachment".format(name=attachment_name))
+
+            if not self._dry_run:
                 link_name = attachment['_links']['download'][1:].encode('utf8')
                 content = self._client._service_get_request(sub_uri=link_name, raw=True)
-                filename = os.path.join(temp_dir, attachment['title'])
-                with open(filename, 'wb') as f:
-                    f.write(content)
 
-                for attach in dst_attachments:
-                    if attachment['title'] == attach['title']:
-                        self.log.debug("Updating existing attachment '{name}'".format(name=attachment_name))
-                        with open(filename, 'rb') as f:
-                            self._client.update_attachment(
-                                content_id=page_copy_id,
-                                attachment_id=attach['id'],
-                                attachment={'file': f}
-                            )
-                        break
-                else:
-                    self.log.debug("Creating new attachment '{name}'".format(name=attachment_name))
-                    with open(filename, 'rb') as f:
-                        self._client.create_new_attachment_by_content_id(
-                            content_id=page_copy_id,
-                            attachments={'file': f}
-                        )
-        finally:
-            self.log.debug("Removing temp directory '{}'".format(temp_dir))
-            shutil.rmtree(temp_dir)
+            for attach in dst_attachments:
+                if attachment['title'] == attach['title']:
+                    self.log.debug("Updating existing attachment '{name}'".format(name=attachment_name))
+
+                    self._client.update_attachment(
+                        content_id=page_copy_id,
+                        attachment_id=attach['id'],
+                        attachment={
+                            'file': (attachment_name, content, attachment_type),
+                            'comment': attachment_comment
+                        }
+                    )
+                    break
+            else:
+                self.log.debug("Creating new attachment '{name}'".format(name=attachment_name))
+                self._client.create_new_attachment_by_content_id(
+                    content_id=page_copy_id,
+                    attachments={
+                        'file': (attachment_name, content, attachment_type),
+                        'comment': attachment_comment
+                    }
+                )
 
 
 def init_args():
