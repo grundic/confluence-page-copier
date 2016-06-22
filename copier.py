@@ -313,8 +313,8 @@ class ConfluencePageCopier(object):
 
         for attachment in src_attachments:
             attachment_name = attachment['title'].encode('utf8')
-            attachment_type = attachment['metadata']['mediaType']
-            attachment_comment = attachment['metadata']['comment']
+            attachment_type = attachment.get('metadata', {}).get('mediaType', u'')
+            attachment_comment = attachment.get('metadata', {}).get('comment', u'')
             self.log.debug("Downloading '{name}' attachment".format(name=attachment_name))
 
             if not self._dry_run:
