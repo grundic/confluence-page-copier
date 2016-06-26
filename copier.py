@@ -4,7 +4,9 @@ import re
 import urllib
 import logging
 import argparse
+from urlparse import urljoin
 
+from requests import Request
 from PythonConfluenceAPI import ConfluenceAPI
 from boltons.cacheutils import LRU, cachedmethod
 
@@ -312,10 +314,10 @@ class ConfluencePageCopier(object):
         self.log.info("Copying {} attachment(s)".format(len(src_attachments)))
 
         for attachment in src_attachments:
-            attachment_name = attachment['title'].encode('utf8')
+            attachment_name = attachment['title']
             attachment_type = attachment.get('metadata', {}).get('mediaType', u'')
             attachment_comment = attachment.get('metadata', {}).get('comment', u'')
-            self.log.debug("Downloading '{name}' attachment".format(name=attachment_name))
+            self.log.debug("Downloading '{name}' attachment".format(name=attachment_name.encode('utf8')))
 
             if not self._dry_run:
                 link_name = attachment['_links']['download'][1:].encode('utf8')
@@ -325,26 +327,61 @@ class ConfluencePageCopier(object):
 
             for attach in dst_attachments:
                 if attachment['title'] == attach['title']:
-                    self.log.debug("Updating existing attachment '{name}'".format(name=attachment_name))
-
-                    self._client.update_attachment(
+                    self.log.debug("Updating existing attachment '{name}'".format(name=attachment_name.encode('utf8')))
+                    self._update_attachment(
                         content_id=page_copy_id,
                         attachment_id=attach['id'],
-                        attachment={
-                            'file': (attachment_name, content, attachment_type),
-                            'comment': attachment_comment
-                        }
+                        attachment_name=attachment_name,
+                        attachment_content=content,
+                        attachment_type=attachment_type,
+                        attachment_comment=attachment_comment
                     )
                     break
             else:
-                self.log.debug("Creating new attachment '{name}'".format(name=attachment_name))
-                self._client.create_new_attachment_by_content_id(
+                self.log.debug("Creating new attachment '{name}'".format(name=attachment_name.encode('utf8')))
+                self._create_attachment(
                     content_id=page_copy_id,
-                    attachments={
-                        'file': (attachment_name, content, attachment_type),
-                        'comment': attachment_comment
-                    }
+                    attachment_name=attachment_name,
+                    attachment_content=content,
+                    attachment_type=attachment_type,
+                    attachment_comment=attachment_comment
                 )
+
+    def _update_attachment(self, content_id, attachment_id, attachment_name, attachment_content, attachment_type, attachment_comment):
+        url = urljoin(
+            self._client.uri_base,
+            "rest/api/content/{content_id}/child/attachment/{attachment_id}/data"
+            "".format(content_id=content_id, attachment_id=attachment_id)
+        )
+        return self._process_attachment(url, attachment_name, attachment_content, attachment_type, attachment_comment)
+
+    def _create_attachment(self, content_id, attachment_name, attachment_content, attachment_type, attachment_comment):
+        url = urljoin(
+            self._client.uri_base,
+            "rest/api/content/{id}/child/attachment".format(id=content_id)
+        )
+        return self._process_attachment(url, attachment_name, attachment_content, attachment_type, attachment_comment)
+
+    def _process_attachment(self, url, attachment_name, attachment_content, attachment_type, attachment_comment):
+        req = Request(
+            'POST',
+            url,
+            headers={"X-Atlassian-Token": "nocheck"},
+            files={
+                'file': (attachment_name, attachment_content, attachment_type),
+                'comment': attachment_comment
+            },
+            auth=(self._client.username, self._client.password)
+        )
+        prepared_request = req.prepare()
+        prepared_request.body = re.sub(
+            b'filename\*=.*[^\r](\r\n|\n)', b'filename="' + attachment_name.encode('utf8') + r'"\1',
+            prepared_request.body
+        )
+        prepared_request.headers['content-length'] = len(prepared_request.body)
+        response = self._client.session.send(prepared_request, verify=True)
+        response.raise_for_status()
+        return response
 
 
 def init_args():
