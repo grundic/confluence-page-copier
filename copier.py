@@ -74,15 +74,15 @@ class ConfluencePageCopier(object):
 
         # ancestor_id determines parent of the page being copied. If it's not provided, we take it from source page.
         # If source page doesn't have ancestors, that means that it's root page, so we will copy to the root as well.
-        if not ancestor_id:
-            if source['ancestors'] and source['space']['key'] == dst_space_key:
-                self.log.debug('Setting ancestor id to {}'.format(source['ancestors'][0]['id']))
-                ancestor_id = source['ancestors'][0]['id']
-            elif dst_parent_id is not None:
+        if ancestor_id is None:
+            if dst_parent_id is not None:
                 ancestor_id = dst_parent_id
             elif dst_parent_title is not None:
                 dst_parent = self._find_page(space_key=dst_space_key, title=dst_parent_title)
                 ancestor_id = dst_parent['id']
+            elif 'ancestors' in source and source['space']['key'] == dst_space_key:
+                self.log.debug('Setting ancestor id to {}'.format(source['ancestors'][-1]['id']))
+                ancestor_id = source['ancestors'][-1]['id']
             else:
                 ancestor_id = None
 
