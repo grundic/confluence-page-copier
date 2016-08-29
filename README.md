@@ -1,6 +1,12 @@
 # Confluence page copier
 Python script for creating a copy of a tree of Confluence pages.
 
+# Official support of the feature from Atlassian
+There is a ticket [CONF-2814](https://jira.atlassian.com/browse/CONF-2814), which has there for a while. But since some time this feature was picked up by Atlassian's developers and looks like it should be available from 6.0 release, here what was said in the [comment](https://jira.atlassian.com/browse/CONF-2814?focusedCommentId=951221&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-951221):
+> This feature is available for preview in the Confluence Early Access Program (EAP) in the lead up to the Confluence 6.0 release.
+Check out the [milestone release notes](https://confluence.atlassian.com/display/DOC/Confluence+6.0.0-m+EAP+Release+Notes) for more information and to download the EAP.
+
+
 ## Description
 This script will help you to create duplicates of Confluence pages and their children.
 By default script will create a copy of page, labels and attachments. Default title of copied page would be
