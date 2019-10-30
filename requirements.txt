@@ -1,4 +1,4 @@
-requests == 2.10.0
+requests == 2.20.0
 PythonConfluenceAPI == 0.0.1rc6
 boltons==16.4.1
 future==0.15.2
